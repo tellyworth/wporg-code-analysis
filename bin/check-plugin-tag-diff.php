@@ -241,7 +241,6 @@ if ( isset( $opts['errors'] ) ) {
 $result_1 = $phpcs->run_json_report( $path_old, $args, 'array' );
 $result_2 = $phpcs->run_json_report( $path_new, $args, 'array' );
 
-#var_dump( array_diff_assoc( $result_1, $result_2 ) );
 $files = array_unique( array_merge( array_keys( $result_1[ 'files' ] ), array_keys( $result_2[ 'files' ] ) ) );
 foreach ( $files as $filename ) {
 	if ( empty( $result_1[ 'files' ][ $filename ] ) ) {
@@ -251,15 +250,22 @@ foreach ( $files as $filename ) {
 		echo "Removed in $version_strings[1]: $filename\n";
 		echo "Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
 	} else {
-		if ( $result_1[ 'files' ][ $filename ][ 'errors' ] > $result_2[ 'files' ][ $filename ][ 'errors' ] || $result_1[ 'files' ][ $filename ][ 'warnings' ] > $result_2[ 'files' ][ $filename ][ 'warnings' ] ) {
-			echo "Improved in $version_strings[1]: $filename\n";
+		if ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) || array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) ) {
+			echo "Changed in $version_strings[1]: $filename\n";
 			echo "Was Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
 			echo "Now Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
-			var_dump( $result_1[ 'files' ][ $filename ] );
-		} elseif ( $result_1[ 'files' ][ $filename ][ 'errors' ] < $result_2[ 'files' ][ $filename ][ 'errors' ] || $result_1[ 'files' ][ $filename ][ 'warnings' ] < $result_2[ 'files' ][ $filename ][ 'warnings' ] ) {
-			echo "Worse in $version_strings[1]: $filename\n";
-			echo "Was Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
-			echo "Now Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+
+			foreach ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) as $fixed ) {
+				echo "Fixed: \n" . $fixed['line'] . "\t " . $fixed['type'] . "\t";
+				echo $fixed[ 'source' ] . "\n";
+				echo $fixed[ 'message' ] . "\n\n";
+			}
+
+			foreach ( array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) as $added ) {
+				echo "Introduced: \n" . $added['line'] . "\t " . $added['type'] . "\t";
+				echo $added[ 'source' ] . "\n";
+				echo $added[ 'message' ] . "\n\n";
+			}
 		} else {
 			#echo "No change in $version_strings[1]: $filename\n";
 			#echo "Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
