@@ -17,7 +17,7 @@ if ( 'cli' != php_sapi_name() ) {
 	die();
 }
 
-$opts = getopt( '', array( 'slug:', 'tag:', 'report:', 'page:', 'number:', 'errors', 'browse:' ) );
+$opts = getopt( '', array( 'slug:', 'tag:', 'report:', 'page:', 'number:', 'errors', 'jsonfile:' ) );
 if ( empty( $opts['report'] ) ) {
 	$opts['report'] = 'summary';
 }
@@ -196,84 +196,98 @@ define( 'WPINC', 'yeahnah' );
 // Load phpcs class
 require dirname( __DIR__ ) . '/includes/class-phpcs.php';
 
-$svn_tags = get_svn_tag_versions( $opts['slug'], $opts['tag' ] );
-if ( $svn_tags ) {
-	echo str_repeat( '=', 80 ) . "\n";
-	echo "Checking svn " . $opts['slug'] . " version $svn_tags[0] vs $svn_tags[1]...\n";
-	echo str_repeat( '=', 80 ) . "\n";
-	$version_strings = $svn_tags;
-
-	$path_old = export_plugin( $opts['slug'], $svn_tags[0] );
-	$path_new = export_plugin( $opts['slug'], $svn_tags[1] );
-} else {
-	$versions = get_zip_versions( $opts['slug'], $opts['tag'] );
-	if ( !$versions || count( $versions ) !== 2 ) {
-		echo "Unable to find plugin " . $opts['slug'] . " version " . $opts['tag'] . "\n";
-		#var_dump( $versions );
-		die;
-	}
-	$version_strings = array_keys( $versions );
-	$zip_urls = array_values( $versions );
-
-	echo str_repeat( '=', 80 ) . "\n";
-	echo "Checking zip " . $opts['slug'] . " version $version_strings[0] vs $version_strings[1]...\n";
-	echo str_repeat( '=', 80 ) . "\n";
-
-	$path_old = export_plugin_zip( $opts['slug'], $zip_urls[0] );
-	$path_new = export_plugin_zip( $opts['slug'], $zip_urls[1] );
-}
 
 
-$phpcs = new PHPCS();
-$phpcs->set_standard( dirname( __DIR__ ) . '/MinimalPluginStandard' );
+function differential_scan( $slug, $tag ) {
 
-$args = array(
-	'extensions' => 'php', // Only check php files.
-	's' => true, // Show the name of the sniff triggering a violation.
-);
+	$svn_tags = get_svn_tag_versions( $slug, $tag );
+	if ( $svn_tags ) {
+		echo str_repeat( '=', 80 ) . "\n";
+		echo "Checking svn " . $slug . " version $svn_tags[0] vs $svn_tags[1]...\n";
+		echo str_repeat( '=', 80 ) . "\n";
+		$version_strings = $svn_tags;
 
-if ( isset( $opts['errors'] ) ) {
-	$args[ 'n' ] = true;
-}
-
-
-
-$result_1 = $phpcs->run_json_report( $path_old, $args, 'array' );
-$result_2 = $phpcs->run_json_report( $path_new, $args, 'array' );
-
-$files = array_unique( array_merge( array_keys( $result_1[ 'files' ] ), array_keys( $result_2[ 'files' ] ) ) );
-foreach ( $files as $filename ) {
-	if ( empty( $result_1[ 'files' ][ $filename ] ) ) {
-		echo "New in $version_strings[1]: $filename\n";
-		echo "Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
-	} elseif ( empty( $result_2[ 'files' ][ $filename ] ) ) {
-		echo "Removed in $version_strings[1]: $filename\n";
-		echo "Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+		$path_old = export_plugin( $slug, $svn_tags[0] );
+		$path_new = export_plugin( $slug, $svn_tags[1] );
 	} else {
-		if ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) || array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) ) {
-			echo "Changed in $version_strings[1]: $filename\n";
-			echo "Was Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
-			echo "Now Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+		$versions = get_zip_versions( $slug, $tag );
+		if ( !$versions || count( $versions ) !== 2 ) {
+			echo "Unable to find plugin " . $slug . " version " . $tag . "\n";
+			#var_dump( $versions );
+			return false;
+		}
+		$version_strings = array_keys( $versions );
+		$zip_urls = array_values( $versions );
 
-			foreach ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) as $fixed ) {
-				echo "Fixed: \n" . $fixed['line'] . "\t " . $fixed['type'] . "\t";
-				echo $fixed[ 'source' ] . "\n";
-				echo $fixed[ 'message' ] . "\n\n";
-			}
+		echo str_repeat( '=', 80 ) . "\n";
+		echo "Checking zip " . $slug . " version $version_strings[0] vs $version_strings[1]...\n";
+		echo str_repeat( '=', 80 ) . "\n";
 
-			foreach ( array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) as $added ) {
-				echo "Introduced: \n" . $added['line'] . "\t " . $added['type'] . "\t";
-				echo $added[ 'source' ] . "\n";
-				echo $added[ 'message' ] . "\n\n";
-			}
+		$path_old = export_plugin_zip( $slug, $zip_urls[0] );
+		$path_new = export_plugin_zip( $slug, $zip_urls[1] );
+	}
+
+
+	$phpcs = new PHPCS();
+	$phpcs->set_standard( dirname( __DIR__ ) . '/MinimalPluginStandard' );
+
+	$args = array(
+		'extensions' => 'php', // Only check php files.
+		's' => true, // Show the name of the sniff triggering a violation.
+	);
+
+
+
+	$result_1 = $phpcs->run_json_report( $path_old, $args, 'array' );
+	$result_2 = $phpcs->run_json_report( $path_new, $args, 'array' );
+
+	$files = array_unique( array_merge( array_keys( $result_1[ 'files' ] ), array_keys( $result_2[ 'files' ] ) ) );
+	foreach ( $files as $filename ) {
+		if ( empty( $result_1[ 'files' ][ $filename ] ) ) {
+			echo "New in $version_strings[1]: $filename\n";
+			echo "Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+		} elseif ( empty( $result_2[ 'files' ][ $filename ] ) ) {
+			echo "Removed in $version_strings[1]: $filename\n";
+			echo "Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
 		} else {
-			#echo "No change in $version_strings[1]: $filename\n";
-			#echo "Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+			if ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) || array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) ) {
+				echo "Changed in $version_strings[1]: $filename\n";
+				echo "Was Errors " . $result_1[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_1[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+				echo "Now Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+
+				foreach ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) as $fixed ) {
+					echo "Fixed: \n" . $fixed['line'] . "\t " . $fixed['type'] . "\t";
+					echo $fixed[ 'source' ] . "\n";
+					echo $fixed[ 'message' ] . "\n\n";
+				}
+
+				foreach ( array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) as $added ) {
+					echo "Introduced: \n" . $added['line'] . "\t " . $added['type'] . "\t";
+					echo $added[ 'source' ] . "\n";
+					echo $added[ 'message' ] . "\n\n";
+				}
+			} else {
+				#echo "No change in $version_strings[1]: $filename\n";
+				#echo "Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
+			}
+		}
+
+	}
+
+	#echo `diff -r -x '*.js' -x '*.txt' -x '*.mo' -x '*.po' -x '*.css' $path_old $path_new`;
+}
+
+if ( !empty( $opts['slug' ] ) && !empty( $opts['tag'] ) ) {
+	differential_scan( $opts['slug'], $opts['tag'] );
+} elseif ( !empty( $opts[ 'jsonfile' ] ) ) {
+	$jsondb = json_decode( file_get_contents( $opts['jsonfile' ] ) );
+	if ( !$jsondb ) {
+		die("Unable to read data from " . $opts['jsonfile'] . "\n");
+	}
+
+	foreach ( array_reverse( $jsondb ) as $item ) {
+		if ( isset( $item->slug ) && isset( $item->max_version_vulnerable ) && false !== strpos( $item->url, 'wordpress.org' ) ) {
+			differential_scan( $item->slug, $item->max_version_vulnerable );
 		}
 	}
-
 }
-
-#echo `diff -r -x '*.js' -x '*.txt' -x '*.mo' -x '*.po' -x '*.css' $path_old $path_new`;
-
-
