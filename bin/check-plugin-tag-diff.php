@@ -239,7 +239,13 @@ function differential_scan( $slug, $tag, $errors_only = false ) {
 
 
 	$result_1 = $phpcs->run_json_report( $path_old, $args, 'array' );
+	if ( !$result_1 ) {
+		return false;
+	}
 	$result_2 = $phpcs->run_json_report( $path_new, $args, 'array' );
+	if ( !$result_2 ) {
+		return false;
+	}
 
 	$files = array_unique( array_merge( array_keys( $result_1[ 'files' ] ), array_keys( $result_2[ 'files' ] ) ) );
 	foreach ( $files as $filename ) {
