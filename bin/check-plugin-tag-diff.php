@@ -198,7 +198,7 @@ require dirname( __DIR__ ) . '/includes/class-phpcs.php';
 
 
 
-function differential_scan( $slug, $tag ) {
+function differential_scan( $slug, $tag, $errors_only = false ) {
 
 	$svn_tags = get_svn_tag_versions( $slug, $tag );
 	if ( $svn_tags ) {
@@ -256,15 +256,19 @@ function differential_scan( $slug, $tag ) {
 				echo "Now Errors " . $result_2[ 'files' ][ $filename ][ 'errors' ] . " and Warnings " . $result_2[ 'files' ][ $filename ][ 'warnings' ] . "\n";
 
 				foreach ( array_diff_key( $result_1[ 'files' ][ $filename ]['messages'], $result_2[ 'files' ][ $filename ]['messages'] ) as $fixed ) {
-					echo "Fixed: \n" . $fixed['line'] . "\t " . $fixed['type'] . "\t";
-					echo $fixed[ 'source' ] . "\n";
-					echo $fixed[ 'message' ] . "\n\n";
+					if ( !$errors_only || 'ERROR' === $fixed['type'] ) {
+						echo "Fixed: \n" . $fixed['line'] . "\t " . $fixed['type'] . "\t";
+						echo $fixed[ 'source' ] . "\n";
+						echo $fixed[ 'message' ] . "\n\n";
+					}
 				}
 
 				foreach ( array_diff_key( $result_2[ 'files' ][ $filename ]['messages'], $result_1[ 'files' ][ $filename ]['messages'] ) as $added ) {
-					echo "Introduced: \n" . $added['line'] . "\t " . $added['type'] . "\t";
-					echo $added[ 'source' ] . "\n";
-					echo $added[ 'message' ] . "\n\n";
+					if ( !$errors_only || 'ERROR' === $added['type'] ) {
+						echo "Introduced: \n" . $added['line'] . "\t " . $added['type'] . "\t";
+						echo $added[ 'source' ] . "\n";
+						echo $added[ 'message' ] . "\n\n";
+					}
 				}
 			} else {
 				#echo "No change in $version_strings[1]: $filename\n";
@@ -278,7 +282,7 @@ function differential_scan( $slug, $tag ) {
 }
 
 if ( !empty( $opts['slug' ] ) && !empty( $opts['tag'] ) ) {
-	differential_scan( $opts['slug'], $opts['tag'] );
+	differential_scan( $opts['slug'], $opts['tag'], isset( $opts['errors'] ) );
 } elseif ( !empty( $opts[ 'jsonfile' ] ) ) {
 	$jsondb = json_decode( file_get_contents( $opts['jsonfile' ] ) );
 	if ( !$jsondb ) {
@@ -287,7 +291,7 @@ if ( !empty( $opts['slug' ] ) && !empty( $opts['tag'] ) ) {
 
 	foreach ( array_reverse( $jsondb ) as $item ) {
 		if ( isset( $item->slug ) && isset( $item->max_version_vulnerable ) && false !== strpos( $item->url, 'wordpress.org' ) ) {
-			differential_scan( $item->slug, $item->max_version_vulnerable );
+			differential_scan( $item->slug, $item->max_version_vulnerable, isset( $opts[ 'errors' ] ) );
 		}
 	}
 }
