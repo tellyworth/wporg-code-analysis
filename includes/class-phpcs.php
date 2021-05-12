@@ -174,7 +174,7 @@ class PHPCS {
 		}
 		$arg_string = implode( ' ', $arg_array );
 
-		$command = "{$this->php} {$this->phpcs} $arg_string $path";
+		$command = "{$this->php} -dmax_execution_time=60 {$this->phpcs} $arg_string $path";
 
 		return shell_exec( $command );
 	}
